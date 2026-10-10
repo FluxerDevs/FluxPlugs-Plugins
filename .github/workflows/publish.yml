@@ -37,18 +37,27 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.changed.outputs.ids }}
+      repository: ${{ steps.toolchain.outputs.repository }}
       ref: ${{ steps.toolchain.outputs.ref }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: toolchain
-        run: echo "ref=$(node -p "require('./toolchain.json').fluxplugs.ref")" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        run: |
+          echo "repository=$(node -p "require('./toolchain.json').fluxplugs.repository")" >> "$GITHUB_OUTPUT"
+          echo "ref=$(node -p "require('./toolchain.json').fluxplugs.ref")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: FluxerDevs/FluxPlugs
+          repository: ${{ steps.toolchain.outputs.repository }}
           ref: ${{ steps.toolchain.outputs.ref }}
           path: fluxplugs
+          # FLUXPLUGS_TOKEN is needed while the FluxPlugs repository is
+          # private; without it the repository's own token is used.
+          token: ${{ secrets.FLUXPLUGS_TOKEN || github.token }}
+          persist-credentials: false
       - id: changed
-        run: echo "ids=$(node fluxplugs/scripts/community/changed-plugins.mjs --root . --plugin '${{ inputs.plugin }}')" >> "$GITHUB_OUTPUT"
+        env:
+          PLUGIN_INPUT: ${{ inputs.plugin }}
+        run: echo "ids=$(node fluxplugs/scripts/community/changed-plugins.mjs --root . --plugin "$PLUGIN_INPUT")" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: changed
@@ -62,14 +71,18 @@ jobs:
     env:
       PLUGIN: ${{ matrix.plugin }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: FluxerDevs/FluxPlugs
+          repository: ${{ needs.changed.outputs.repository }}
           ref: ${{ needs.changed.outputs.ref }}
           path: fluxplugs
+          # FLUXPLUGS_TOKEN is needed while the FluxPlugs repository is
+          # private; without it the repository's own token is used.
+          token: ${{ secrets.FLUXPLUGS_TOKEN || github.token }}
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10.15.1
@@ -157,8 +170,9 @@ jobs:
       - name: Ask fluxer.plus to rebuild
         env:
           GH_TOKEN: ${{ secrets.FLUXPLUGS_DISPATCH_TOKEN }}
+          REPOSITORY: ${{ needs.changed.outputs.repository }}
         run: >
-          gh api repos/FluxerDevs/FluxPlugs/dispatches
+          gh api "repos/$REPOSITORY/dispatches"
           -f event_type=community-plugins-updated
           -f "client_payload[plugin]=$PLUGIN"
           -f "client_payload[tag]=${{ steps.release.outputs.tag }}"

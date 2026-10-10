@@ -39,4 +39,4 @@ body:
     id: environment
     attributes:
       label: Fluxer and FluxPlugs versions
-      description: From Fluxer Settings → FluxPlugs → Settings.
+      description: The FluxPlugs version is the badge Fluxer shows in its bottom-left corner when you turn on Show FluxPlugs badge in Fluxer Settings → FluxPlugs → Settings, or the installer you downloaded.

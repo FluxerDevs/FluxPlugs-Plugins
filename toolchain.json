@@ -1,7 +1,7 @@
 {
-  "_comment": "The FluxPlugs commit whose plugin-tools build every plugin here. Set it to a commit on FluxerDevs/FluxPlugs main that has scripts/community/.",
+  "_comment": "The FluxPlugs commit whose plugin-tools build every plugin here, and the repository it lives in. During the private beta that is the maintainer's repository, which the workflows check out with the FLUXPLUGS_TOKEN secret (a fine-grained token with read access to its contents); FLUXPLUGS_DISPATCH_TOKEN needs write access to it so the store rebuilds. When the code moves to FluxerDevs/FluxPlugs, point repository there and the secrets can go.",
   "fluxplugs": {
-    "repository": "FluxerDevs/FluxPlugs",
-    "ref": "SET-ME-TO-A-FLUXPLUGS-COMMIT-SHA"
+    "repository": "Fer2G/FluxPlugsTemp",
+    "ref": "e3b30597e1db2c8dfffafd0dbeee21569afa9c15"
   }
 }

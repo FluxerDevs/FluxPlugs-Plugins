@@ -8,3 +8,6 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope
