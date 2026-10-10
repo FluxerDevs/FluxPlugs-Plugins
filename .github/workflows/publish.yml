@@ -1,0 +1,164 @@
+name: publish
+
+# Releases every plugin whose fluxplug.json version is ahead of its
+# release.json: rebuild with the pinned toolchain, VirusTotal, a GitHub
+# release with the ZIP, a build provenance attestation, release.json, and a
+# repository_dispatch so fluxer.plus rebuilds the store.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      # The commit this workflow makes touches only these, so it doesn't
+      # start another run.
+      - "!plugins/*/release.json"
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: "Plugin id to publish (empty: every plugin whose version changed)"
+        required: false
+        default: ""
+      allow_virustotal_flags:
+        description: "Publish even if VirusTotal engines flag the file"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.changed.outputs.ids }}
+      ref: ${{ steps.toolchain.outputs.ref }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: toolchain
+        run: echo "ref=$(node -p "require('./toolchain.json').fluxplugs.ref")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: FluxerDevs/FluxPlugs
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: fluxplugs
+      - id: changed
+        run: echo "ids=$(node fluxplugs/scripts/community/changed-plugins.mjs --root . --plugin '${{ inputs.plugin }}')" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: changed
+    if: needs.changed.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        plugin: ${{ fromJson(needs.changed.outputs.ids) }}
+    env:
+      PLUGIN: ${{ matrix.plugin }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: FluxerDevs/FluxPlugs
+          ref: ${{ needs.changed.outputs.ref }}
+          path: fluxplugs
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: fluxplugs/pnpm-lock.yaml
+      - run: pnpm --dir fluxplugs install --frozen-lockfile
+      - run: pnpm --dir fluxplugs --filter @fluxplugs/plugin-tools... build
+
+      - name: Rebuild, check the hash and pack
+        run: node fluxplugs/scripts/community/release-plugin.mjs --root . --plugin "$PLUGIN" --out "out/$PLUGIN"
+
+      - name: VirusTotal
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: >
+          node fluxplugs/scripts/community/virustotal-wait.mjs "out/$PLUGIN"
+          --json "out/$PLUGIN/virustotal.json"
+          ${{ inputs.allow_virustotal_flags && '--allow-flags' || '' }}
+
+      - name: Create the GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./out/$PLUGIN/build.json').version")
+          NAME=$(node -p "require('./out/$PLUGIN/build.json').name")
+          ZIP=$(node -p "require('./out/$PLUGIN/build.json').zip.name")
+          TAG="$PLUGIN-v$VERSION"
+          NOTES="out/$PLUGIN/notes.md"
+          {
+            echo "## $NAME $VERSION"
+            echo
+            echo "Import \`$ZIP\` in Fluxer Settings → FluxPlugs → Plugins. Details, permissions and checksums: https://fluxer.plus/plugins/$PLUGIN/"
+            echo
+            if [ -f "plugins/$PLUGIN/CHANGELOG.md" ]; then
+              awk -v v="## $VERSION" 'index($0, v) == 1 { p = 1; next } /^## / { p = 0 } p' "plugins/$PLUGIN/CHANGELOG.md"
+            fi
+          } > "$NOTES"
+          gh release create "$TAG" "out/$PLUGIN/$ZIP" "out/$PLUGIN/SHA256SUMS.txt" --title "$NAME $VERSION" --notes-file "$NOTES"
+          ZIP_URL=$(gh release view "$TAG" --json assets --jq ".assets[] | select(.name == \"$ZIP\") | .url")
+          RELEASE_URL=$(gh release view "$TAG" --json url --jq .url)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "zip_url=$ZIP_URL" >> "$GITHUB_OUTPUT"
+          echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the ZIP
+        id: attest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: out/${{ matrix.plugin }}/*.zip
+
+      - name: Write release.json and CODEOWNERS
+        run: |
+          set -euo pipefail
+          VT="out/$PLUGIN/virustotal.json"
+          if [ "$(cat "$VT")" = "null" ]; then VT=none; fi
+          node fluxplugs/scripts/community/write-release-json.mjs --root . \
+            --build "out/$PLUGIN/build.json" \
+            --virustotal "$VT" \
+            --tag "${{ steps.release.outputs.tag }}" \
+            --release-url "${{ steps.release.outputs.release_url }}" \
+            --zip-url "${{ steps.release.outputs.zip_url }}" \
+            --attestation-url "${{ steps.attest.outputs.attestation-url || 'none' }}" \
+            --toolchain "${{ needs.changed.outputs.ref }}"
+          node fluxplugs/scripts/community/generate-codeowners.mjs --root .
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./out/$PLUGIN/build.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "plugins/$PLUGIN/release.json" CODEOWNERS
+          git commit -m "store: publish $PLUGIN $VERSION"
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Ask fluxer.plus to rebuild
+        env:
+          GH_TOKEN: ${{ secrets.FLUXPLUGS_DISPATCH_TOKEN }}
+        run: >
+          gh api repos/FluxerDevs/FluxPlugs/dispatches
+          -f event_type=community-plugins-updated
+          -f "client_payload[plugin]=$PLUGIN"
+          -f "client_payload[tag]=${{ steps.release.outputs.tag }}"

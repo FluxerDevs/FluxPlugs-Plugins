@@ -1,0 +1,29 @@
+name: Verification request
+description: Ask a maintainer to review a published version for the Reviewed label.
+title: "[verify] "
+labels: [verification]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reviewed means a maintainer read this exact version's code for malware and checked that the download matches it. It is tied to the version's code hash, so each new version needs a new review. Reviews happen in maintainers' own time; small capability sets and readable code are reviewed sooner.
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin id
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Published version
+      description: The version in plugins/<id>/release.json.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Where to look
+      description: What the plugin sends where, which capabilities need which code, and anything a reviewer might find surprising.
+    validations:
+      required: true

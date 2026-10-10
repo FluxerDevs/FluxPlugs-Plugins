@@ -1,0 +1,43 @@
+name: validate
+
+# Checks the one plugin a pull request changes, with the scripts and the
+# plugin toolchain of the FluxPlugs commit pinned in toolchain.json.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Read the toolchain pin
+        id: toolchain
+        run: echo "ref=$(node -p "require('./toolchain.json').fluxplugs.ref")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: FluxerDevs/FluxPlugs
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: fluxplugs
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: fluxplugs/pnpm-lock.yaml
+      - run: pnpm --dir fluxplugs install --frozen-lockfile
+      - run: pnpm --dir fluxplugs --filter @fluxplugs/plugin-tools... build
+      - name: Validate the changed plugin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          node fluxplugs/scripts/community/validate.mjs
+          --root .
+          --base "origin/${{ github.base_ref }}"
+          --author "${{ github.event.pull_request.user.login }}"

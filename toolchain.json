@@ -1,0 +1,7 @@
+{
+  "_comment": "The FluxPlugs commit whose plugin-tools build every plugin here. Set it to a commit on FluxerDevs/FluxPlugs main that has scripts/community/.",
+  "fluxplugs": {
+    "repository": "FluxerDevs/FluxPlugs",
+    "ref": "SET-ME-TO-A-FLUXPLUGS-COMMIT-SHA"
+  }
+}

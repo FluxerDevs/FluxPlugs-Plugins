@@ -1,0 +1,42 @@
+name: Plugin report
+description: A published plugin misbehaves, misleads, or looks unsafe.
+title: "[plugin] "
+labels: [plugin-report]
+body:
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin id
+      description: As shown on the plugin's store page URL, fluxer.plus/plugins/<id>/.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What the plugin did, what you expected, and how to see it again. Paste the message FluxPlugs showed, if any.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - Doesn't work
+        - Does something its page doesn't say
+        - Sends data somewhere unexpected
+        - The download, the page and Fluxer show different hashes
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Fluxer and FluxPlugs versions
+      description: From Fluxer Settings → FluxPlugs → Settings.

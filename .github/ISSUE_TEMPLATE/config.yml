@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Problem with FluxPlugs or a bundled plugin
+    url: https://github.com/FluxerDevs/FluxPlugs/issues/new/choose
+    about: The injector, FluxPlugs itself and the plugins that ship with it are in the FluxPlugs repository.
+  - name: Security problem in FluxPlugs
+    url: https://github.com/FluxerDevs/FluxPlugs/security/policy
+    about: Report it privately, as the security policy describes. Don't open a public issue.
+  - name: Questions and help
+    url: https://fluxer.plus/community/
+    about: Ask in The Cookie Factory, the community on Fluxer.
+  - name: Report someone's behavior
+    url: https://github.com/FluxerDevs/FluxPlugs/blob/main/CODE_OF_CONDUCT.md#report-a-problem
+    about: Message Cookie privately, as the code of conduct describes.
